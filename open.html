@@ -3,62 +3,65 @@
 <title>Multi-Link Opener</title>
 <p id="status">Preparing…</p>
 <script>
-const MAX = 50, STEP = 40, CHILD_NAME = "multiLinkWin";
+const MAX=50, STEP=40, CHILD_NAME="multiLinkWin";
 
+// --- utils ---
 function norm(u){
   u=(u||"").trim(); if(!u) return null;
   try{
-    if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) u = "https://" + u;
-    const url = new URL(u); const p = url.protocol.toLowerCase();
+    if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) u="https://"+u;
+    const url=new URL(u), p=url.protocol.toLowerCase();
     if(p!=="http:" && p!=="https:") return null;
     return url.toString();
   }catch{ return null; }
 }
-
 function parseLinks(){
-  const p = new URLSearchParams(location.search);
-  const out = [];
-  const all = p.get("all");
-  if(all) out.push(...all.split("|"));
+  const p=new URLSearchParams(location.search), out=[];
+  const all=p.get("all"); if(all) out.push(...all.split("|"));
   for(const [k,v] of p) if(k==="u") out.push(v);
-  const seen = new Set(), clean = [];
+  const seen=new Set(), clean=[];
   for(const raw of out){
-    const n = norm(raw);
+    const n=norm(raw);
     if(n && !seen.has(n)){ seen.add(n); clean.push(n); if(clean.length>=MAX) break; }
   }
   return clean;
 }
-
 function uid(){ return Date.now().toString(36)+"-"+Math.random().toString(36).slice(2); }
 
 (function main(){
-  const s = document.getElementById("status");
-  const params = new URLSearchParams(location.search);
-  const isChild = params.get("child")==="1";
-  const links = parseLinks();
-  if(!links.length){ s.textContent = "No valid links."; return; }
+  const s=document.getElementById("status");
+  const params=new URLSearchParams(location.search);
+  const isChild=params.get("child")==="1";
+  const links=parseLinks();
+  if(!links.length){ s.textContent="No valid links."; return; }
 
   if(!isChild){
-    // --- LAUNCHER ---
-    const token = uid();
-    const key = "ml_child_ready_"+token;
+    // ---------- LAUNCHER ----------
+    const token=uid();
+    const key="ml_child_ready_"+token;
 
-    // Listen for child handshake
-    let childReady = false;
-    function onStorage(e){ if(e.key===key){ childReady = true; window.removeEventListener("storage", onStorage); } }
+    // Handshake listener (don’t rely on window.open return value)
+    let childReady=false;
+    function onStorage(e){ if(e.key===key){ childReady=true; window.removeEventListener("storage", onStorage); } }
     window.addEventListener("storage", onStorage);
 
-    // Open child in a named window. IMPORTANT: no 'noreferrer' so we can detect success.
-    const payload = encodeURIComponent(links.join("|"));
-    const childUrl = `${location.origin}${location.pathname}?all=${payload}&child=1&token=${encodeURIComponent(token)}`;
-    window.open(childUrl, CHILD_NAME, "noopener");
+    // Build child URL
+    const payload=encodeURIComponent(links.join("|"));
+    const childUrl=`${location.origin}${location.pathname}?all=${payload}&child=1&token=${encodeURIComponent(token)}`;
 
-    // If no handshake within 700ms, assume blocked and fallback.
+    // IMPORTANT: give windowFeatures dimensions so browsers open a *new window*
+    // (regular window with tab bar), not just a tab in the current window.
+    const features="width=1200,height=800,left=80,top=60,noopener"; // no 'noreferrer' (breaks some checks)
+    window.open(childUrl, CHILD_NAME, features);
+
+    // Decide after short wait whether child launched
     setTimeout(()=>{
-      if(childReady) {
-        s.textContent = `Opened a window for ${links.length} tab(s)…`;
-      } else {
-        s.textContent = "Popup blocked — opening here instead.";
+      if(childReady){
+        // Child is alive → wipe this tab so you don’t see an extra status tab
+        location.replace("about:blank");
+      }else{
+        // Popup blocked → fallback: open in current window as tabs
+        s.textContent="Popup blocked — opening here instead.";
         let i=0;
         for(const link of links){
           setTimeout(()=>window.open(link,"_blank","noopener,noreferrer"), STEP*i++);
@@ -66,21 +69,21 @@ function uid(){ return Date.now().toString(36)+"-"+Math.random().toString(36).sl
       }
     }, 700);
 
-  } else {
-    // --- CHILD ---
-    const token = params.get("token") || "";
-    const key = "ml_child_ready_"+token;
+  }else{
+    // ---------- CHILD ----------
+    const token=params.get("token")||"";
+    const key="ml_child_ready_"+token;
 
-    // Signal launcher we’re alive, then clean up the key
-    try { localStorage.setItem(key, "1"); localStorage.removeItem(key); } catch {}
+    // Signal launcher we’re alive
+    try{ localStorage.setItem(key,"1"); localStorage.removeItem(key); }catch{}
 
-    // Open tabs in THIS window’s tab bar
+    // Open each link as a new tab in THIS window’s tab bar
     let i=0;
     for(const link of links){
-      setTimeout(()=>window.open(link,"_blank","noopener,noreferrer"), STEP*i++);
+      setTimeout(()=>{ window.open(link,"_blank","noopener,noreferrer"); }, STEP*i++);
     }
 
-    // Close this helper tab after last open (a small delay is fine)
+    // Close this helper tab; leave only the opened tabs in this new window
     setTimeout(()=>{ try{ window.close(); }catch{} }, STEP*(links.length+1));
   }
 })();
