@@ -25,36 +25,36 @@ function parseUrls(search) {
   }
 
   if (!isChild) {
-    // LAUNCHER → open ONE *normal* window (with tab bar), not a popup
+    // LAUNCHER — open ONE normal window (with tab bar), then close this tab
     const childUrl = new URL(location.href);
     childUrl.searchParams.set("child", "1");
 
-    // No "popup" features; open as a standard window. Most Chromium builds
-    // will give it a tab bar and treat subsequent window.open calls as tabs
-    // in THIS window rather than the original one.
-    const win = window.open(childUrl.toString(), "_blank"); // no features
-
+    const win = window.open(childUrl.toString(), "_blank"); // no features => normal window
     if (!win) {
       document.body.textContent = "Popup blocked. Allow pop-ups for this site and try again.";
       return;
     }
-    document.body.textContent = "Opening your links…";
+
+    // Close the launcher tab (this one). Most browsers allow this since it was user-initiated.
+    window.close();
+
+    // Fallback message if close() is blocked
+    setTimeout(() => {
+      try { if (!win.closed) document.body.textContent = "Opening your links…"; } catch(e) {}
+    }, 300);
     return;
   }
 
-  // CHILD → we're inside the new window. Make sure we're foregrounded.
+  // CHILD — we're in the new window
   try {
     window.focus();
 
-    // (a) Open remaining URLs as new tabs in THIS window.
-    // Small delays help some Chromium builds associate the new tabs here.
+    // Open remaining URLs as new tabs in THIS window (staggered helps Chromium)
     for (let i = 1; i < urls.length; i++) {
-      try {
-        setTimeout(() => { window.open(urls[i], "_blank"); }, i * 30);
-      } catch (e) {}
+      setTimeout(() => { try { window.open(urls[i], "_blank"); } catch(e) {} }, i * 30);
     }
 
-    // (b) Turn THIS window into the first URL (tab #1)
+    // Make this window the first tab
     setTimeout(() => { location.replace(urls[0]); }, 10);
   } catch (e) {
     document.body.textContent = "Could not open all tabs. Allow pop-ups and try again.";
