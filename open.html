@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Opening client links…</title>
+<script>
+(() => {
+  // Read links from query string: either ?u=...&u=... or ?all=url1|url2|url3
+  const p = new URLSearchParams(location.search);
+  let urls = [];
+  for (const [k, v] of p) if (k === "u") urls.push(v);
+  if (!urls.length && p.get("all")) urls = p.get("all").split("|");
+
+  // Clean + deduplicate
+  urls = urls
+    .map(decodeURIComponent)
+    .map(u => u && (/^https?:\/\//i.test(u) ? u : `https://${u}`))
+    .filter(Boolean);
+  urls = [...new Set(urls)];
+
+  if (!urls.length) {
+    document.body.textContent = "No URLs provided.";
+    return;
+  }
+
+  // Open a brand-new window for the first URL, then open remaining as tabs in that window
+  const win = window.open(urls[0], "_blank", "noopener,noreferrer");
+  for (let i = 1; i < urls.length; i++) {
+    try { win.open(urls[i], "_blank"); } catch(e) {}
+  }
+
+  document.body.textContent = `Opened ${urls.length} tab(s) in a new window. You can close this page.`;
+})();
+</script>
