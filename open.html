@@ -1,76 +1,32 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Link Opener</title>
-</head>
-<body>
-
-    <h1>Multi-Link Opener</h1>
-    <p id="status-message">Processing your request...</p>
-
-    <div id="links-container">
-        <h2>Links Opened:</h2>
-        <!-- Links will be added here by JavaScript -->
-    </div>
-
-    <script>
-        // Use a function to handle the logic
-        function openLinks() {
-            try {
-                // Get the current URL and parse the query string
-                const urlParams = new URLSearchParams(window.location.search);
-                const allParam = urlParams.get('all');
-
-                const statusMessage = document.getElementById('status-message');
-                const linksContainer = document.getElementById('links-container');
-
-                if (!allParam) {
-                    statusMessage.textContent = 'No "all" parameter found in the URL. Please check the URL format.';
-                    return;
-                }
-
-                // Decode the URI component and split the links by the pipe character
-                const links = decodeURIComponent(allParam).split('|');
-
-                if (links.length === 0) {
-                    statusMessage.textContent = 'No valid links found in the URL parameter.';
-                    return;
-                }
-
-                statusMessage.textContent = `Opening ${links.length} link(s)...`;
-
-                // Iterate through the links and open each one with a slight delay
-                // to help with pop-up blockers.
-                for (let i = 0; i < links.length; i++) {
-                    const link = links[i];
-                    if (link.trim() !== '') {
-                        // Create a list item to show the user which link is being opened
-                        const linkElement = document.createElement('p');
-                        linkElement.textContent = `Opening: ${link}`;
-                        linksContainer.appendChild(linkElement);
-
-                        // Use a slight delay to allow the browser to handle multiple tabs
-                        window.open(link, '_blank');
-                    }
-                }
-
-                statusMessage.textContent = `All ${links.length} link(s) have been processed.`;
-
-                // Attempt to close the current window.
-                // Note: This will only work if the window was opened by a script.
-                window.close();
-
-            } catch (error) {
-                console.error("Error processing links:", error);
-                document.getElementById('status-message').textContent = 'An error occurred while trying to open the links.';
-            }
-        }
-
-        // Call the function when the page loads
-        window.onload = openLinks;
-
-    </script>
-</body>
-</html>
+<!doctype html><meta charset="utf-8"><title>Open Links</title>
+<p id="s">Processing…</p><div id="log"></div>
+<script>
+const MAX=50, STEP=40;
+const q=new URLSearchParams(location.search);
+const raw = [
+  ...(q.get("all") ? q.get("all").split("|") : []),
+  ...Array.from(q).filter(([k])=>k==="u").map(([,v])=>v)
+];
+function norm(u){
+  u=(u||"").trim(); if(!u) return null;
+  try{
+    if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) u="https://"+u;
+    const url=new URL(u);
+    const p=url.protocol.toLowerCase();
+    if(p!=="http:" && p!=="https:") return null;
+    return url.toString();
+  }catch{ return null; }
+}
+const seen=new Set();
+const links=raw.map(norm).filter(u=>u && !seen.has(u) && (seen.add(u),true)).slice(0,MAX);
+const s=document.getElementById("s"), log=document.getElementById("log");
+if(!links.length){ s.textContent="No valid links."; throw 0; }
+let ok=0, blocked=0;
+links.forEach((link,i)=>setTimeout(()=>{
+  const w=window.open(link,"_blank","noopener,noreferrer");
+  (w&& !w.closed) ? ok++ : blocked++;
+  if(i===links.length-1){
+    s.textContent = blocked? `${ok} opened, ${blocked} blocked (allow pop-ups).` : `Opened ${ok} link(s).`;
+  }
+}, STEP*i));
+</script>
