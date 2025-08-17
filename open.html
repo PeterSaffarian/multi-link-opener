@@ -1,66 +1,76 @@
-<!doctype html>
-<meta charset="utf-8">
-<title>Opening client links…</title>
-<script>
-function parseUrls(search) {
-  const p = new URLSearchParams(search || location.search);
-  let urls = [];
-  for (const [k,v] of p) if (k === "u") urls.push(v);
-  if (!urls.length && p.get("all")) urls = p.get("all").split("|");
-  urls = urls
-    .map(decodeURIComponent)
-    .map(u => u && (/^https?:\/\//i.test(u) ? u : `https://${u}`))
-    .filter(Boolean);
-  return [...new Set(urls)];
-}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Link Opener</title>
+</head>
+<body>
 
-(function main() {
-  const params = new URLSearchParams(location.search);
-  const isChild = params.get("child") === "1";
-  const urls = parseUrls(location.search);
+    <h1>Multi-Link Opener</h1>
+    <p id="status-message">Processing your request...</p>
 
-  if (!urls.length) { document.body.textContent = "No URLs provided."; return; }
+    <div id="links-container">
+        <h2>Links Opened:</h2>
+        <!-- Links will be added here by JavaScript -->
+    </div>
 
-  if (!isChild) {
-    // LAUNCHER — request a separate normal window (no popup features)
-    const childUrl = new URL(location.href);
-    childUrl.searchParams.set("child", "1");
+    <script>
+        // Use a function to handle the logic
+        function openLinks() {
+            try {
+                // Get the current URL and parse the query string
+                const urlParams = new URLSearchParams(window.location.search);
+                const allParam = urlParams.get('all');
 
-    // Open as a new top-level window. Leaving the features string empty helps avoid "popup" treatment.
-    const win = window.open(childUrl.toString(), "_blank", "");
-    if (!win) { document.body.textContent = "Popup blocked. Allow pop-ups for this site and try again."; return; }
+                const statusMessage = document.getElementById('status-message');
+                const linksContainer = document.getElementById('links-container');
 
-    // Close this launcher tab
-    window.close();
-    // Fallback message if close fails
-    setTimeout(() => { try { if (!win.closed) document.body.textContent = "Opening your links…"; } catch(e){} }, 300);
-    return;
-  }
+                if (!allParam) {
+                    statusMessage.textContent = 'No "all" parameter found in the URL. Please check the URL format.';
+                    return;
+                }
 
-  // CHILD — we are now inside the new window.
-  try {
-    try { window.focus(); } catch(e) {}
+                // Decode the URI component and split the links by the pipe character
+                const links = decodeURIComponent(allParam).split('|');
 
-    // Pre-create tabs INSIDE THIS WINDOW, then navigate them.
-    // This pattern reliably keeps tabs in the current window on Chromium/Opera.
-    const handles = [];
-    for (let i = 1; i < urls.length; i++) {
-      // Create about:blank tabs first
-      handles[i] = window.open("about:blank", "_blank");
-    }
+                if (links.length === 0) {
+                    statusMessage.textContent = 'No valid links found in the URL parameter.';
+                    return;
+                }
 
-    // Navigate the newly created tabs to their URLs (stagger to be safe)
-    for (let i = 1; i < urls.length; i++) {
-      const idx = i; // capture
-      setTimeout(() => {
-        try { if (handles[idx]) handles[idx].location = urls[idx]; } catch(e) {}
-      }, i * 60);
-    }
+                statusMessage.textContent = `Opening ${links.length} link(s)...`;
 
-    // Finally, turn THIS window into the first URL (becomes tab #1)
-    setTimeout(() => { location.replace(urls[0]); }, Math.max(30, urls.length * 60 - 30));
-  } catch (e) {
-    document.body.textContent = "Could not open all tabs. Allow pop-ups and try again.";
-  }
-})();
-</script>
+                // Iterate through the links and open each one with a slight delay
+                // to help with pop-up blockers.
+                for (let i = 0; i < links.length; i++) {
+                    const link = links[i];
+                    if (link.trim() !== '') {
+                        // Create a list item to show the user which link is being opened
+                        const linkElement = document.createElement('p');
+                        linkElement.textContent = `Opening: ${link}`;
+                        linksContainer.appendChild(linkElement);
+
+                        // Use a slight delay to allow the browser to handle multiple tabs
+                        window.open(link, '_blank');
+                    }
+                }
+
+                statusMessage.textContent = `All ${links.length} link(s) have been processed.`;
+
+                // Attempt to close the current window.
+                // Note: This will only work if the window was opened by a script.
+                window.close();
+
+            } catch (error) {
+                console.error("Error processing links:", error);
+                document.getElementById('status-message').textContent = 'An error occurred while trying to open the links.';
+            }
+        }
+
+        // Call the function when the page loads
+        window.onload = openLinks;
+
+    </script>
+</body>
+</html>
