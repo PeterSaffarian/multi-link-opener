@@ -18,44 +18,43 @@ function parseUrls(search) {
   const params = new URLSearchParams(location.search);
   const isChild = params.get("child") === "1";
   const urls = parseUrls(location.search);
-
-  if (!urls.length) {
-    document.body.textContent = "No URLs provided.";
-    return;
-  }
+  if (!urls.length) { document.body.textContent = "No URLs provided."; return; }
 
   if (!isChild) {
-    // LAUNCHER — open ONE normal window (with tab bar), then close this tab
+    // --- LAUNCHER: open a *separate window* (not just a tab) ---
+    // Use size/position features to force a new top-level window with a tab bar.
     const childUrl = new URL(location.href);
     childUrl.searchParams.set("child", "1");
 
-    const win = window.open(childUrl.toString(), "_blank"); // no features => normal window
-    if (!win) {
-      document.body.textContent = "Popup blocked. Allow pop-ups for this site and try again.";
-      return;
-    }
+    const features = [
+      "noopener", "noreferrer",
+      `width=${Math.max(1024, screen.availWidth - 20)}`,
+      `height=${Math.max(700,  screen.availHeight - 60)}`,
+      "left=0", "top=0", "resizable=1", "scrollbars=1"
+    ].join(",");
 
-    // Close the launcher tab (this one). Most browsers allow this since it was user-initiated.
+    const win = window.open(childUrl.toString(), "_blank", features);
+    if (!win) { document.body.textContent = "Popup blocked. Allow pop-ups for this site and try again."; return; }
+
+    // Close this launcher tab so only the new window remains
     window.close();
-
-    // Fallback message if close() is blocked
-    setTimeout(() => {
-      try { if (!win.closed) document.body.textContent = "Opening your links…"; } catch(e) {}
-    }, 300);
+    setTimeout(() => { try { if (!win.closed) document.body.textContent = "Opening your links…"; } catch(e){} }, 300);
     return;
   }
 
-  // CHILD — we're in the new window
+  // --- CHILD: running inside the new window. Open all tabs here. ---
   try {
-    window.focus();
+    // Ensure this window is treated as the active context
+    try { window.focus(); } catch(e) {}
+    try { window.moveTo(0,0); window.resizeTo(screen.availWidth, screen.availHeight); } catch(e) {}
 
-    // Open remaining URLs as new tabs in THIS window (staggered helps Chromium)
+    // Open remaining URLs as tabs in THIS window (stagger helps Chromium)
     for (let i = 1; i < urls.length; i++) {
-      setTimeout(() => { try { window.open(urls[i], "_blank"); } catch(e) {} }, i * 30);
+      setTimeout(() => { try { window.open(urls[i], "_blank"); } catch(e) {} }, i * 40);
     }
 
     // Make this window the first tab
-    setTimeout(() => { location.replace(urls[0]); }, 10);
+    setTimeout(() => { location.replace(urls[0]); }, 15);
   } catch (e) {
     document.body.textContent = "Could not open all tabs. Allow pop-ups and try again.";
   }
