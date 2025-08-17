@@ -40,19 +40,35 @@
                 }
 
                 statusMessage.textContent = `Opening ${links.length} link(s)...`;
+                
+                // Open the first link in a new window and store a reference to it.
+                // We use a unique name ('_newWindow') to ensure all tabs open there.
+                let newWindow;
+                if (links.length > 0 && links[0].trim() !== '') {
+                    newWindow = window.open(links[0], '_newWindow');
+                    
+                    const linkElement = document.createElement('p');
+                    linkElement.textContent = `Opening in new window: ${links[0]}`;
+                    linksContainer.appendChild(linkElement);
+                }
 
-                // Iterate through the links and open each one with a slight delay
-                // to help with pop-up blockers.
-                for (let i = 0; i < links.length; i++) {
+                // Iterate through the remaining links and open them in the same new window.
+                for (let i = 1; i < links.length; i++) {
                     const link = links[i];
                     if (link.trim() !== '') {
                         // Create a list item to show the user which link is being opened
                         const linkElement = document.createElement('p');
-                        linkElement.textContent = `Opening: ${link}`;
+                        linkElement.textContent = `Opening in new tab: ${link}`;
                         linksContainer.appendChild(linkElement);
 
-                        // Use a slight delay to allow the browser to handle multiple tabs
-                        window.open(link, '_blank');
+                        // If the new window was successfully created, open subsequent links in it.
+                        // We use the same name ('_newWindow') to group the tabs.
+                        if (newWindow && !newWindow.closed) {
+                            newWindow.open(link, '_newWindow');
+                        } else {
+                            // Fallback if the first window failed to open
+                            window.open(link, '_blank');
+                        }
                     }
                 }
 
