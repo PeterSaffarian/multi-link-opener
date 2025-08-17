@@ -3,67 +3,85 @@
 <title>Multi-Link Opener</title>
 <p id="status">Preparing…</p>
 <script>
-const MAX=50, STEP=40;
+const MAX = 50, STEP = 40, CHILD_NAME = "multiLinkWin";
 
 function norm(u){
   u=(u||"").trim(); if(!u) return null;
   try{
-    if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) u="https://"+u;
-    const url=new URL(u), p=url.protocol.toLowerCase();
+    if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) u = "https://" + u;
+    const url = new URL(u); const p = url.protocol.toLowerCase();
     if(p!=="http:" && p!=="https:") return null;
     return url.toString();
   }catch{ return null; }
 }
 
 function parseLinks(){
-  const p=new URLSearchParams(location.search), out=[];
-  const all=p.get("all");
+  const p = new URLSearchParams(location.search);
+  const out = [];
+  const all = p.get("all");
   if(all) out.push(...all.split("|"));
   for(const [k,v] of p) if(k==="u") out.push(v);
-  const seen=new Set(), clean=[];
+  const seen = new Set(), clean = [];
   for(const raw of out){
-    const n=norm(raw);
-    if(n && !seen.has(n)){
-      seen.add(n); clean.push(n);
-      if(clean.length>=MAX) break;
-    }
+    const n = norm(raw);
+    if(n && !seen.has(n)){ seen.add(n); clean.push(n); if(clean.length>=MAX) break; }
   }
   return clean;
 }
 
-(function main(){
-  const s=document.getElementById("status");
-  const links=parseLinks();
-  if(!links.length){ s.textContent="No valid links."; return; }
+function uid(){ return Date.now().toString(36)+"-"+Math.random().toString(36).slice(2); }
 
-  const isChild = new URLSearchParams(location.search).has("child");
+(function main(){
+  const s = document.getElementById("status");
+  const params = new URLSearchParams(location.search);
+  const isChild = params.get("child")==="1";
+  const links = parseLinks();
+  if(!links.length){ s.textContent = "No valid links."; return; }
 
   if(!isChild){
-    // --- Launcher role ---
-    const payload=encodeURIComponent(links.join("|"));
-    const childUrl=`${location.pathname}?all=${payload}&child=1`;
-    const child=window.open(childUrl,"multiLinkWin","noopener,noreferrer");
-    if(child && !child.closed){
-      s.textContent=`Opened a window for ${links.length} tab(s)…`;
-    }else{
-      // Fallback: open here if popup blocked
-      s.textContent=`Popup blocked — opening in this window instead.`;
-      links.forEach((link,i)=>setTimeout(
-        ()=>window.open(link,"_blank","noopener,noreferrer"), STEP*i));
-    }
-  }else{
-    // --- Child role: open tabs here ---
-    let ok=0, blocked=0;
-    links.forEach((link,i)=>setTimeout(()=>{
-      const w=window.open(link,"_blank","noopener,noreferrer");
-      (w && !w.closed) ? ok++ : blocked++;
-      if(i===links.length-1){
-        if(blocked===0) s.textContent=`Opened ${ok} tab(s).`;
-        else if(ok===0) s.textContent="All pop-ups blocked.";
-        else s.textContent=`${ok} opened, ${blocked} blocked.`;
-        try{ window.close(); }catch{}
+    // --- LAUNCHER ---
+    const token = uid();
+    const key = "ml_child_ready_"+token;
+
+    // Listen for child handshake
+    let childReady = false;
+    function onStorage(e){ if(e.key===key){ childReady = true; window.removeEventListener("storage", onStorage); } }
+    window.addEventListener("storage", onStorage);
+
+    // Open child in a named window. IMPORTANT: no 'noreferrer' so we can detect success.
+    const payload = encodeURIComponent(links.join("|"));
+    const childUrl = `${location.origin}${location.pathname}?all=${payload}&child=1&token=${encodeURIComponent(token)}`;
+    window.open(childUrl, CHILD_NAME, "noopener");
+
+    // If no handshake within 700ms, assume blocked and fallback.
+    setTimeout(()=>{
+      if(childReady) {
+        s.textContent = `Opened a window for ${links.length} tab(s)…`;
+      } else {
+        s.textContent = "Popup blocked — opening here instead.";
+        let i=0;
+        for(const link of links){
+          setTimeout(()=>window.open(link,"_blank","noopener,noreferrer"), STEP*i++);
+        }
       }
-    }, STEP*i));
+    }, 700);
+
+  } else {
+    // --- CHILD ---
+    const token = params.get("token") || "";
+    const key = "ml_child_ready_"+token;
+
+    // Signal launcher we’re alive, then clean up the key
+    try { localStorage.setItem(key, "1"); localStorage.removeItem(key); } catch {}
+
+    // Open tabs in THIS window’s tab bar
+    let i=0;
+    for(const link of links){
+      setTimeout(()=>window.open(link,"_blank","noopener,noreferrer"), STEP*i++);
+    }
+
+    // Close this helper tab after last open (a small delay is fine)
+    setTimeout(()=>{ try{ window.close(); }catch{} }, STEP*(links.length+1));
   }
 })();
 </script>
