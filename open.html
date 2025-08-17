@@ -2,11 +2,10 @@
 <meta charset="utf-8">
 <title>Opening client links…</title>
 <script>
-/* Parse ?u=...&u=... or ?all=url1|url2|url3 */
 function parseUrls(search) {
   const p = new URLSearchParams(search || location.search);
   let urls = [];
-  for (const [k, v] of p) if (k === "u") urls.push(v);
+  for (const [k,v] of p) if (k === "u") urls.push(v);
   if (!urls.length && p.get("all")) urls = p.get("all").split("|");
   urls = urls
     .map(decodeURIComponent)
@@ -26,37 +25,37 @@ function parseUrls(search) {
   }
 
   if (!isChild) {
-    // LAUNCHER (runs in the original tab opened from Airtable)
-    // -> open ONE popup to our own page in child mode; the child will open all tabs.
+    // LAUNCHER → open ONE *normal* window (with tab bar), not a popup
     const childUrl = new URL(location.href);
-    childUrl.searchParams.set("child", "1");         // mark as child
-    const features = [
-      "noopener",
-      "noreferrer",
-      "popup=yes",
-      "toolbar=0,location=0,status=0,menubar=0,scrollbars=1",
-      `width=${screen.availWidth}`, `height=${screen.availHeight}`
-    ].join(",");
+    childUrl.searchParams.set("child", "1");
 
-    const win = window.open(childUrl.toString(), "_blank", features);
+    // No "popup" features; open as a standard window. Most Chromium builds
+    // will give it a tab bar and treat subsequent window.open calls as tabs
+    // in THIS window rather than the original one.
+    const win = window.open(childUrl.toString(), "_blank"); // no features
+
     if (!win) {
-      document.body.textContent = "Popup blocked. Please allow pop-ups for this site and try again.";
+      document.body.textContent = "Popup blocked. Allow pop-ups for this site and try again.";
       return;
     }
-    // Optional: close the launcher tab; comment this out if you prefer to keep it.
-    window.close();
     document.body.textContent = "Opening your links…";
     return;
   }
 
-  // CHILD (runs inside the popup)
+  // CHILD → we're inside the new window. Make sure we're foregrounded.
   try {
-    // Open remaining URLs as new tabs first…
+    window.focus();
+
+    // (a) Open remaining URLs as new tabs in THIS window.
+    // Small delays help some Chromium builds associate the new tabs here.
     for (let i = 1; i < urls.length; i++) {
-      try { window.open(urls[i], "_blank"); } catch (e) {}
+      try {
+        setTimeout(() => { window.open(urls[i], "_blank"); }, i * 30);
+      } catch (e) {}
     }
-    // …then turn THIS popup into the first URL (so the new window hosts tab #1).
-    location.replace(urls[0]);
+
+    // (b) Turn THIS window into the first URL (tab #1)
+    setTimeout(() => { location.replace(urls[0]); }, 10);
   } catch (e) {
     document.body.textContent = "Could not open all tabs. Allow pop-ups and try again.";
   }
