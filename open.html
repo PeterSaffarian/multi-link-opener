@@ -18,43 +18,47 @@ function parseUrls(search) {
   const params = new URLSearchParams(location.search);
   const isChild = params.get("child") === "1";
   const urls = parseUrls(location.search);
+
   if (!urls.length) { document.body.textContent = "No URLs provided."; return; }
 
   if (!isChild) {
-    // --- LAUNCHER: open a *separate window* (not just a tab) ---
-    // Use size/position features to force a new top-level window with a tab bar.
+    // LAUNCHER — request a separate normal window (no popup features)
     const childUrl = new URL(location.href);
     childUrl.searchParams.set("child", "1");
 
-    const features = [
-      "noopener", "noreferrer",
-      `width=${Math.max(1024, screen.availWidth - 20)}`,
-      `height=${Math.max(700,  screen.availHeight - 60)}`,
-      "left=0", "top=0", "resizable=1", "scrollbars=1"
-    ].join(",");
-
-    const win = window.open(childUrl.toString(), "_blank", features);
+    // Open as a new top-level window. Leaving the features string empty helps avoid "popup" treatment.
+    const win = window.open(childUrl.toString(), "_blank", "");
     if (!win) { document.body.textContent = "Popup blocked. Allow pop-ups for this site and try again."; return; }
 
-    // Close this launcher tab so only the new window remains
+    // Close this launcher tab
     window.close();
+    // Fallback message if close fails
     setTimeout(() => { try { if (!win.closed) document.body.textContent = "Opening your links…"; } catch(e){} }, 300);
     return;
   }
 
-  // --- CHILD: running inside the new window. Open all tabs here. ---
+  // CHILD — we are now inside the new window.
   try {
-    // Ensure this window is treated as the active context
     try { window.focus(); } catch(e) {}
-    try { window.moveTo(0,0); window.resizeTo(screen.availWidth, screen.availHeight); } catch(e) {}
 
-    // Open remaining URLs as tabs in THIS window (stagger helps Chromium)
+    // Pre-create tabs INSIDE THIS WINDOW, then navigate them.
+    // This pattern reliably keeps tabs in the current window on Chromium/Opera.
+    const handles = [];
     for (let i = 1; i < urls.length; i++) {
-      setTimeout(() => { try { window.open(urls[i], "_blank"); } catch(e) {} }, i * 40);
+      // Create about:blank tabs first
+      handles[i] = window.open("about:blank", "_blank");
     }
 
-    // Make this window the first tab
-    setTimeout(() => { location.replace(urls[0]); }, 15);
+    // Navigate the newly created tabs to their URLs (stagger to be safe)
+    for (let i = 1; i < urls.length; i++) {
+      const idx = i; // capture
+      setTimeout(() => {
+        try { if (handles[idx]) handles[idx].location = urls[idx]; } catch(e) {}
+      }, i * 60);
+    }
+
+    // Finally, turn THIS window into the first URL (becomes tab #1)
+    setTimeout(() => { location.replace(urls[0]); }, Math.max(30, urls.length * 60 - 30));
   } catch (e) {
     document.body.textContent = "Could not open all tabs. Allow pop-ups and try again.";
   }
