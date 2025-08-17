@@ -41,7 +41,8 @@
 
                 statusMessage.textContent = `Opening ${links.length} link(s)...`;
 
-                // Iterate through all the links and open each one in a new tab
+                // Iterate through the links and open each one with a slight delay
+                // to help with pop-up blockers.
                 for (let i = 0; i < links.length; i++) {
                     const link = links[i];
                     if (link.trim() !== '') {
